@@ -1,0 +1,38 @@
+Resources:
+  MyStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      RoleArn: arn:aws:iam::583896736300:role/stepfunctionlambdarole
+      DefinitionString:
+        Fn::Sub: |
+          {
+            "Comment": "Transaction Processor State Machine",
+            "StartAt": "ProcessTransation",
+            "States": {
+              "ProcessTransation": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.TransactionType",
+                    "StringEquals": "PURCHASE",
+                    "Next": "ProcessPurchase"
+                  },
+                  {
+                    "Variable": "$.TransactionType",
+                    "StringEquals": "REFUND",
+                    "Next": "ProcessRefund"
+                  }
+                ]
+              },
+              "ProcessRefund": {
+                "Type": "Task",
+                "Resource": "arn:aws:lambda:us-east-1:583896736300:function:ProcessRefund",
+                "End": true
+              },
+              "ProcessPurchase": {
+                "Type": "Task",
+                "Resource": "arn:aws:lambda:us-east-1:583896736300:function:ProcessPurchase",
+                "End": true
+              }
+            }
+          }
