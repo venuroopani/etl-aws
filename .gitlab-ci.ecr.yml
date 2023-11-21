@@ -1,0 +1,45 @@
+image: docker:latest  # Use Docker as the default image for jobs
+services:
+  - docker:dind
+stages:
+  - build
+variables:
+    DOCKER_IMAGE_NAME: "583896736300.dkr.ecr.us-east-1.amazonaws.com/test-repo"
+    TAG: $CI_JOB_ID
+before_script:
+    - echo "This job is triggered manually"
+    - docker info
+    - apk add aws-cli
+    - aws --version
+    - apk add jq
+    - jq --version
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set default.region us-east-1
+
+    # Run the AWS CLI command to assume the role.
+    - aws sts assume-role --role-arn $AWS_ROLE_ARN --role-session-name GitLabCIAssumeRole >temp-cred-file
+    - cat temp-cred-file
+    # Export the assumed role's temporary credentials.
+    - aws configure set aws_access_key_id $(cat temp-cred-file | jq '.Credentials' | jq '.AccessKeyId' -r) --profile temp-profile
+    - aws configure set aws_secret_access_key $(cat temp-cred-file| jq '.Credentials' | jq '.SecretAccessKey' -r) --profile temp-profile
+    - aws configure set aws_session_token $(cat temp-cred-file | jq '.Credentials' | jq '.SessionToken' -r) --profile temp-profile
+    - aws configure set default.region us-east-1 --profile temp-profile
+    - rm -rf temp-cred-file
+    # Now you can use the assumed role credentials for AWS CLI commands.
+    - aws s3 ls --profile temp-profile
+
+    - echo "Logging in to AWS ECR..."
+    - aws ecr get-login-password --region us-east-1 --profile temp-profile | docker login --username AWS --password-stdin 583896736300.dkr.ecr.us-east-1.amazonaws.com
+
+build:
+  stage: build
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $DOCKER_IMAGE_NAME:$TAG .
+    - echo "Pushing Docker image to AWS ECR..."
+    - docker push $DOCKER_IMAGE_NAME:$TAG
+    #push files to s3 bucket
+    - aws s3 cp . s3://test-bla-bla-12345/test/ --recursive --profile temp-profile
+  when: manual
+  
