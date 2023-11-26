@@ -1,0 +1,58 @@
+Resources:
+
+  # IAM Role for Glue Crawler
+  GlueCrawlerRole: 
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: glue-service    
+          PolicyDocument:
+            Statement:
+              - Effect: Allow 
+                Action:
+                  - 'glue:*'
+                Resource: '*'
+ 
+  # Glue Crawler      
+  ProductsCrawler:
+    Type: AWS::Glue::Crawler  
+    Properties:
+      Role: !GetAtt GlueCrawlerRole.Arn
+      DatabaseName: productsdb  
+      Targets:
+        S3Targets:
+          - Path: s3://yourbucket/product_csvs
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: DEPRECATE_IN_DATABASE
+  
+  # Glue Database
+  ProductsDatabase:
+    Type: AWS::Glue::Database
+    Properties:   
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:   
+        Name: productsdb
+               
+  # Glue Table       
+  ProductsTable:
+    Type: AWS::Glue::Table
+    Properties:
+      DatabaseName: productsdb  
+      TableInput:
+        Name: products
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: json
+        StorageDescriptor:
+          Location: s3://yourbucket/product_csvs
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:   
+            SerializationLibrary: org.apache.hive.hcatalog.data.JsonSerDe
