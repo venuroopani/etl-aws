@@ -1,0 +1,42 @@
+Resources:
+  # IAM Role for Glue Job
+  GlueJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: glue-policy  
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetBucketLocation'
+                  - 's3:ListAllMyBuckets'
+                Resource: '*' 
+              - 
+                Effect: Allow
+                Action: 
+                  - 's3:GetObject'
+                  - 's3:PutObject' 
+                Resource: 
+                  - arn:aws:s3:::yourbucket
+                  - arn:aws:s3:::yourbucket/*     
+                 
+  # Glue Job      
+  GlueJob:
+    Type: 'AWS::Glue::Job'
+    Properties:
+      Command: 
+        Name: glueetl
+        ScriptLocation: s3://yourbucket/glue-scripts/job.py
+      DefaultArguments:  
+        '--some_parameter': "some_value"
+      Role: !GetAtt GlueJobRole.Arn        
+      ExecutionProperty:
+        MaxConcurrentRuns: 2
