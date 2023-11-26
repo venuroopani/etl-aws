@@ -27,28 +27,3 @@ Resources:
         Image: busybox
         Vcpus: 2
         Memory: 512      
-
-  BatchComputeEnvironment:
-    Type: AWS::Batch::ComputeEnvironment
-    Properties:
-      Type: MANAGED
-      ServiceRole: !Ref BatchServiceRole
-      ComputeResources:
-        Type: FARGATE
-        MinvCpus: 0
-        MaxvCpus: 2
-        DesiredvCpus: 2
-        Subnets: 
-          - subnet-xxxxxxx
-        SecurityGroupIds:
-          - sg-xxxxxxx   
-
-  BatchJob:
-    Type: AWS::Batch::JobDefinition
-    Properties:
-      JobDefinition: !Ref BatchJobDefinition
-      JobQueue: !Ref BatchJobQueue
-      ContainerOverrides:
-        Command:
-          - echo
-          - "Hello World"
