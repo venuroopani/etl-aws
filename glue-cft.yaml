@@ -1,18 +1,53 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
+Parameters:
+  GlueConnectionName:
+    Type: String
+    Description: Name of the Glue Connection
+
+  GlueRoleArn:
+    Type: String
+    Description: ARN of the IAM role for the Glue job
+
+  GlueScriptLocation:
+    Type: String
+    Description: S3 path to the Glue ETL script
+
+  ExtraPyFiles:
+    Type: String
+    Description: S3 path to the Glue ETL script
+
 Resources:
   MyGlueJob:
     Type: 'AWS::Glue::Job'
     Properties:
       Name: MyGlueJob
-      Role: arn:aws:iam::123456789012:role/YourGlueServiceRole
+      Role: !Ref GlueRoleArn
       Command:
         Name: glueetl
-        ScriptLocation: s3://your-s3-bucket/your-glue-script.py
+        ScriptLocation: !Ref GlueScriptLocation
       DefaultArguments:
-        "--job-language": python
-        "--extra-py-files": s3://your-s3-bucket/your-python-dependency.zip
+        '--job-bookmark-option': 'job-bookmark-disable'
+        '--key1': 'value1'
+        '--key2': 'value2'
+        '--TempDir': 's3://your-s3-bucket/temp-path/'
+        '--job-language': 'python'
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--enable-spark-ui': 'true'
+        '--spark-event-logs-path': 's3://your-s3-bucket/spark-logs/'
+        '--extra-py-files': !Ref ExtraPyFiles
+        '--connection-name': !Ref GlueConnectionName
+
       GlueVersion: "4.0"
       WorkerType: G.2X
-      NumberOfWorkers: 2
-      MaxCapacity: 2.0
+      NumberOfWorkers: 10
+
+
+aws cloudformation create-stack \
+  --stack-name YourGlueJobStack \
+  --template-body file://path/to/your/template.yaml \
+  --parameters ParameterKey=GlueConnectionName,ParameterValue=YourConnectionName \
+               ParameterKey=GlueRoleArn,ParameterValue=arn:aws:iam::your-account-id:role/YourGlueRole \
+               ParameterKey=GlueScriptLocation,ParameterValue=s3://your-s3-bucket/your-glue-script.py \
+               ParameterKey=ExtraPyFiles,ParameterValue=
