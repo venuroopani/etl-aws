@@ -8,3 +8,12 @@ aws cloudformation validate-template --template-url https://s3.amazonaws.com/myb
 
 # View details of what resources would be created  
 aws cloudformation estimate-template-cost --template-body file://template.yml
+
+
+aws cloudformation create-stack \
+  --stack-name MyStepFunctionsStack \
+  --template-body file://your-template-file.yaml \
+  --parameters ParameterKey=StateMachineName,ParameterValue=CustomStateMachine \
+               ParameterKey=RoleArn,ParameterValue=arn:aws:iam::123456789012:role/CustomRole \
+               ParameterKey=DefinitionFileLocation,ParameterValue=s3://your-bucket/your-custom-state-machine-definition.json
+
