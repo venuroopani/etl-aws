@@ -1,58 +1,60 @@
-Resources:
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create an AWS Glue Database
 
-  # IAM Role for Glue Crawler
-  GlueCrawlerRole: 
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: glue.amazonaws.com
-            Action: 'sts:AssumeRole'
-      Policies:
-        - PolicyName: glue-service    
-          PolicyDocument:
-            Statement:
-              - Effect: Allow 
-                Action:
-                  - 'glue:*'
-                Resource: '*'
- 
-  # Glue Crawler      
-  ProductsCrawler:
-    Type: AWS::Glue::Crawler  
-    Properties:
-      Role: !GetAtt GlueCrawlerRole.Arn
-      DatabaseName: productsdb  
-      Targets:
-        S3Targets:
-          - Path: s3://yourbucket/product_csvs
-      SchemaChangePolicy:
-        UpdateBehavior: UPDATE_IN_DATABASE
-        DeleteBehavior: DEPRECATE_IN_DATABASE
-  
-  # Glue Database
-  ProductsDatabase:
+Parameters:
+  DatabaseName:
+    Type: String
+    Description: Name of the Glue Database
+
+Resources:
+  MyGlueDatabase:
     Type: AWS::Glue::Database
-    Properties:   
+    Properties:
       CatalogId: !Ref AWS::AccountId
-      DatabaseInput:   
-        Name: productsdb
-               
-  # Glue Table       
-  ProductsTable:
+      DatabaseInput:
+        Name: !Ref DatabaseName
+
+aws cloudformation create-stack   --stack-name YourGlueDatabaseStack   --template-body file://glue-databse-cft.yaml   --parameters ParameterKey=DatabaseName,ParameterValue=test-db
+
+
+=======================================
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create an AWS Glue Table for Athena
+
+Parameters:
+  DatabaseName:
+    Type: String
+    Description: Name of the Glue Database
+  TableName:
+    Type: String
+    Description: Name of the Glue Table
+  S3Location:
+    Type: String
+    Description: S3 location of the data
+
+Resources:
+  MyGlueTable:
     Type: AWS::Glue::Table
     Properties:
-      DatabaseName: productsdb  
+      DatabaseName: !Ref DatabaseName
+      CatalogId: !Ref AWS::AccountId
       TableInput:
-        Name: products
-        TableType: EXTERNAL_TABLE
-        Parameters:
-          classification: json
+        Name: !Ref TableName
         StorageDescriptor:
-          Location: s3://yourbucket/product_csvs
+          Columns:
+            - Name: column1
+              Type: string
+            - Name: column2
+              Type: int
+          Location: !Ref S3Location
           InputFormat: org.apache.hadoop.mapred.TextInputFormat
           OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-          SerdeInfo:   
-            SerializationLibrary: org.apache.hive.hcatalog.data.JsonSerDe
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+          Parameters:
+            classification: json
+            compressionType: none
+
+
+aws cloudformation create-stack   --stack-name GlueTableStack   --template-body file://aws-glue-table-cft.yaml   --parameters ParameterKey=DatabaseName,ParameterValue=test-db ParameterKey=TableName,ParameterValue=table-name ParameterKey=S3Location,ParameterValue=s3://your-s3-bucket/path/to/data
