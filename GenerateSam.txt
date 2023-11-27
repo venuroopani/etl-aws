@@ -1,0 +1,211 @@
+import sys, os
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.sql import functions as F
+import pandas as pd
+from pyspark.sql.functions import expr
+from bkfs.prod_parquets import ProdParquets
+from datetime import datetime
+from bkfs.utils import setup_logger, get_status_df, need_current_run, upload_to_s3
+from bkfs.mail import MailHandler
+
+
+
+logger = setup_logger()
+if __name__ == '__main__':
+    
+## @params: [JOB_NAME]
+    args = getResolvedOptions(sys.argv,  ['JOB_NAME', 'run_date', 'bucket_name',
+                                      's3_path', 'email', 'output_addresses_name', 'output_names_name'])
+    
+    sc = SparkContext()
+    glueContext = GlueContext(sc)
+    spark = glueContext.spark_session
+    job = Job(glueContext)
+    job.init(args['JOB_NAME'], args)
+    logger.info(f'Arguments found:{args}')
+    config = {
+                'date': datetime.strptime(args['run_date'], '%Y%m%d').date(),
+                'bucket_name': args['bucket_name'],
+                'folder_name': args['s3_path'],
+                'output_addresses_name': args['output_addresses_name'],
+                'output_names_name': args['output_names_name'],
+                'address_table_name': 'bks_lookup_unique_addresses_melissa_output',
+                'names_table_name': 'bks_lookup_unique_names_melissa_output',
+                'address_columns': ['ADR_LN1_V', 'CITY_V', 'STATE', 'ZIP_V', 'ZIP4_V'],
+                'names_columns': ['M_FULLNAME'],
+                'database': 'bkfs_automation',
+                'proofpoint_server': '10.52.220.18',
+                'mail_port': '25',
+                'sender': 'bkfs_automation@verisk.com',
+                'receiver': args['email'].split(',')            
+        }
+    me = MailHandler(config)
+    df = get_status_df(config['bucket_name'],
+                   config['folder_name'], config['date'])
+    prev_step = ['ADDRESS_SCRUBBING', 'NAMES_SCRUBBING']
+    curr_step = 'PROD_SAM'
+    is_run_required = need_current_run(df, config['date'], prev_step, curr_step, False)
+    is_run_required=True
+    if not is_run_required:
+        logger.info('Step already executed, so exiting')
+    else:
+        start = datetime.now()
+        logger.info('Loading address table')
+        addresses_df = glueContext.create_dynamic_frame.from_catalog(database='bkfs_automation', table_name='bks_lookup_unique_addresses_melissa_output').toDF()
+        logger.info('Loaded address table')
+        logger.info('Loading names table')
+        names_output = glueContext.create_dynamic_frame.from_catalog(database='bkfs_automation', table_name='bks_lookup_unique_names_melissa_output').toDF()
+        logger.info('Loaded names table')
+        s3_path_names = f"s3://{config['bucket_name']}/{config['folder_name']}/names/preprocessed/{config['output_names_name']}_{config['date'].strftime('%Y%m%d')}.parquet"
+        s3_path_addresses = f"s3://{config['bucket_name']}/{config['folder_name']}/addresses/preprocessed/{config['output_addresses_name']}_{config['date'].strftime('%Y%m%d')}.parquet"
+        logger.info(f'Loading names pre processed table from path:{s3_path_names}')
+        pre_names = spark.read.parquet(s3_path_names)
+        logger.info(f'Loaded names pre processed table')
+        logger.info(f'Loading addresses pre processed table from path:{s3_path_addresses}')
+        pre_addr = spark.read.parquet(s3_path_addresses)
+        logger.info(f'Loaded addresses pre processed table')
+        logger.info('Extracting required addresses for run')
+        addresses_df = addresses_df.alias('ua').join(pre_addr.alias('pa'), expr("""ua.ADR_LN1_V=pa.ADR_LN1_V and ua.CITY_V=pa.CITY_V and ua.STATE=pa.STATE and ua.ZIP_V=pa.ZIP_V and ua.ZIP4_V=pa.ZIP4_V"""), how='inner').selectExpr('ua.AddressKey','ua.ADR_LN1_V','ua.CITY_V','ua.STATE','ua.ZIP_V','ua.ZIP4_V')
+        logger.info('Extracted required addresses for run')
+        logger.info('Extracting required names for run')
+        names_output = names_output.alias('un').join(pre_names.alias('pn'), expr("""un.M_FullName=pn.M_FullName"""),how='inner').selectExpr('un.M_FullName','un.subjectkey')
+        logger.info('Extracted required names for run')
+        addresses_df = addresses_df.fillna("")
+        names_output = names_output.fillna("")
+        newRow = spark.createDataFrame([("",-1)], ["M_FullName","subjectkey"])
+        names_output=names_output.union(newRow)
+        prod = ProdParquets(config,sc,spark,glueContext,job,F)
+        prod_status = []
+        try:
+            pattren='SAM_Orphan_Refresh'
+            logger.info(f"Started Generating Prod_{pattren} parquets")
+            path =f"s3://{config['bucket_name']}/{config['folder_name']}/raw_parquet_files/{pattren}/Raw_{pattren}_{config['date'].strftime('%Y%m%d')}.parquet"
+            logger.info(f'Reading raw parquet file from path: {path}')
+            pd_raw_sor = pd.read_parquet(path).fillna("")
+            logger.info(f'completed reading raw parquet file')
+            if(len(pd_raw_sor)>0):
+                logger.info(f'Data found to process {pattren}')
+                raw_sor = spark.read.parquet(path).fillna("")
+                s3_path = f"s3://{config['bucket_name']}/{config['folder_name']}/prod_parquet_files/{pattren}/prod_{pattren.lower()}_{config['date'].strftime('%Y%m%d')}.parquet"
+                logger.info('Loaded data into spark df')
+                logger.info(f"started Generating {pattren} Parquets")
+                final_df_sor = prod.load_prod_Sam_Orphan_Refresh_prod(raw_sor, addresses_df, names_output)
+                logger.info(f"completed Generating {pattren} Parquets")
+                final_df_sor = final_df_sor.toPandas()
+                prod.compare_raw_prod(pattren, pd_raw_sor, final_df_sor, prod_status)
+                final_df_sor['date_insert'] =  config['date']
+                logger.info("comparision was sucessfull")
+                logger.info(f'Writing data to s3path:{s3_path}')
+                final_df_sor.to_parquet(s3_path)
+                logger.info('Process completed')
+            
+
+            pattren='SAM_Orphan_Update'
+            logger.info(f"Started Generating Prod_{pattren} parquets")
+            path = f"s3://{config['bucket_name']}/{config['folder_name']}/raw_parquet_files/{pattren}/Raw_{pattren}_{config['date'].strftime('%Y%m%d')}.parquet"
+            logger.info(f'Reading raw parquet file from path: {path}')
+            raw_sou = pd.read_parquet(path).fillna("")
+            logger.info(f'completed reading raw parquet file')
+            if(len(raw_sou)>0):
+                logger.info(f'Data found to process {pattren}')
+                raw_sou = spark.read.parquet(path).fillna("")
+                s3_path = f"s3://{config['bucket_name']}/{config['folder_name']}/prod_parquet_files/{pattren}/prod_{pattren.lower()}_{config['date'].strftime('%Y%m%d')}.parquet"
+                logger.info('Loaded data into spark df')
+                logger.info(f"started Generating {pattren} Parquets")
+                final_df_sou = prod.load_prod_SAM_ORPHAN_UPDATE_prod(raw_sou, addresses_df, names_output)
+                logger.info(f"completed Generating {pattren} Parquets")
+                final_df_sou = final_df_sou.toPandas()
+                prod_status = prod.compare_raw_prod(pattren, raw_sou.toPandas(), final_df_sou,prod_status)
+                logger.info("comparision was sucessfull")
+                final_df_sou['date_insert'] =  config['date']
+                logger.info(f'Writing data to s3path:{s3_path}')
+                final_df_sou.to_parquet(s3_path)
+                logger.info('Process completed')
+            
+
+            pattren='SAM_Update'
+            logger.info(f"Started Generating Prod_{pattren} parquets")
+            path =f"s3://{config['bucket_name']}/{config['folder_name']}/raw_parquet_files/{pattren}/Raw_{pattren}_{config['date'].strftime('%Y%m%d')}.parquet"
+            logger.info(f'Reading raw parquet file from path: {path}')
+            pd_raw_su = pd.read_parquet(path).fillna("")
+            logger.info(f'completed reading raw parquet file')
+            if(len(pd_raw_su)>0):
+                logger.info(f'Data found to process {pattren}')
+                raw_su = spark.read.parquet(path).fillna("")
+                s3_path = f"s3://{config['bucket_name']}/{config['folder_name']}/prod_parquet_files/{pattren}/prod_{pattren.lower()}_{config['date'].strftime('%Y%m%d')}.parquet"
+                logger.info('Loaded data into spark df')
+                logger.info(f"started Generating {pattren} Parquets")
+                final_df_su = prod.load_prod_SAM_Update_prod(raw_su, addresses_df, names_output)
+                logger.info(f"completed Generating {pattren} Parquets")
+                final_df_su = final_df_su.toPandas()
+                prod_status = prod.compare_raw_prod(pattren, pd_raw_su, final_df_su,prod_status)
+                logger.info("comparision was sucessfull")
+                logger.info(f'Writing data to s3path:{s3_path}')
+                final_df_su['date_insert'] =  config['date']
+                final_df_su.to_parquet(s3_path)
+                logger.info('Process completed')
+            
+
+            pattren='SAM_Refresh'
+            logger.info(f"Started Generating Prod_{pattren} parquets")
+            path = f"s3://{config['bucket_name']}/{config['folder_name']}/raw_parquet_files/{pattren}/Raw_{pattren}_{config['date'].strftime('%Y%m%d')}.parquet"
+            logger.info(f'Reading raw parquet file from path: {path}')
+            pd_raw_sr = pd.read_parquet(path).fillna("")
+            logger.info(f'completed reading raw parquet file')
+            if(len(pd_raw_sr)>0):
+                logger.info(f'Data found to process {pattren}')
+                raw_sr = spark.read.parquet(path).fillna("")
+                s3_path = f"s3://{config['bucket_name']}/{config['folder_name']}/prod_parquet_files/{pattren}/prod_{pattren.lower()}_{config['date'].strftime('%Y%m%d')}.parquet"
+                logger.info('Loaded data into spark df')
+                logger.info(f"started Generating {pattren} Parquets")
+                final_df_sr = prod.load_prod_Sam_Refresh_prod(raw_sr, addresses_df, names_output)
+                logger.info(f"completed Generating {pattren} Parquets")
+                final_df_sr = final_df_sr.toPandas()
+                prod_status = prod.compare_raw_prod(pattren, raw_sr.toPandas(), final_df_sr,prod_status)
+                final_df_sr['date_insert'] = config['date']
+                logger.info("comparision was sucessfull")
+                logger.info(f'Writing data to s3path:{s3_path}')
+                final_df_sr.to_parquet(s3_path)
+                logger.info('Process completed')
+            
+
+            df = pd.DataFrame.from_dict(prod_status)
+            df['run_date'] = config['date']
+            df=df.rename(columns = {'Prod Count':'actual_count', 'Raw Count':'source_count','Source Count':'source_count','Actual Count':'actual_count','File Name':'filename','Filename':'filename'})
+            df.to_parquet(config['date'].strftime('%Y%m%d')+'_prod_sam.parquet')
+            logger.info(f'Stats after processing: {prod_status}')
+            logger.info('Uploading stats to s3')
+            upload_to_s3(config['bucket_name'], config['folder_name']+'/counts/'+config['date'].strftime(
+                '%Y%m%d')+'_prod_sam.parquet', config['date'].strftime('%Y%m%d')+'_prod_sam.parquet')
+            logger.info('Uploaded stats to s3')
+            end = datetime.now()
+            new_row = {
+                'step_name': curr_step,
+                'run_date': pd.to_datetime(config['date']),
+                'start_date': pd.to_datetime(start),
+                'end_date': pd.to_datetime(end),
+                'status': 'Success',
+                'message': 'Completed without errors'
+            }
+            new_df = pd.DataFrame([new_row])
+            df = get_status_df(config['bucket_name'],
+                               config['folder_name'], config['date'])
+            df = pd.concat([df, new_df], ignore_index=True)
+            path = 's3://' + config['bucket_name'] + '/' + config['folder_name']+'/status/' + \
+                args['run_date'] + '_status.parquet'
+            logger.info(f"status updating to s3: {path}")
+            df.to_parquet(path)
+            logger.info(f"status updated to s3: {path}")
+
+        except Exception as e:
+            logger.error(str(e))
+            me.send_error_email(
+                "Error in generating sam prod parquet", "Error while generating sam prod parquet. Please check logs for more details")
+            raise e
+        
+            
+job.commit()
