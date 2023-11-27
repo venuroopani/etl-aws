@@ -54,3 +54,14 @@ Resources:
             Value: 1024
         JobRoleArn: !Ref JobRoleArn
         ExecutionRoleArn: !Ref ExecutionRoleArn
+
+
+
+aws cloudformation create-stack \
+  --stack-name YourBatchStack \
+  --template-body file://your-template-file.yaml \
+  --parameters ParameterKey=ComputeEnvironment,ParameterValue=arn:aws:batch:your-region:your-account-id:compute-environment/your-compute-env \
+               ParameterKey=ImageName,ParameterValue=your-docker-image-name \
+               ParameterKey=JobRoleArn,ParameterValue=arn:aws:iam::your-account-id:role/your-job-role \
+               ParameterKey=ExecutionRoleArn,ParameterValue=arn:aws:iam::your-account-id:role/your-execution-role \
+  --capabilities CAPABILITY_IAM
