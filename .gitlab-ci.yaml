@@ -1,0 +1,92 @@
+stages:
+  - create_ecr_repo
+  - create_step_function
+  - create_glue_database
+  - create_glue_table
+  - create_glue_job
+  - create_batch_resources
+
+variables:
+  AWS_DEFAULT_REGION: "your-region"
+  AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+
+create_ecr_repo:
+  stage: create_ecr_repo
+  script:
+    - echo "Checking if ECR Repo already exists..."
+    - repo_exists=$(aws ecr describe-repositories --repository-names my-ecr-repo --output json | jq -r '.repositories | length')
+    - if [ "$repo_exists" -eq 0 ]; then
+        echo "ECR Repo doesn't exist. Creating..."
+        aws cloudformation deploy --template-file ecr-repo-template.yaml --stack-name ECRRepoStack --parameter-overrides RepositoryName=my-ecr-repo
+      else
+        echo "ECR Repo already exists, skipping creation."
+      fi
+
+create_step_function:
+  stage: create_step_function
+  script:
+    - echo "Checking if Step Function already exists..."
+    - step_function_exists=$(aws stepfunctions describe-state-machine --state-machine-arn arn:aws:states:your-region:your-account-id:stateMachine:YourStateMachine --output json | jq -r '.name')
+    - if [ -z "$step_function_exists" ]; then
+        echo "Step Function doesn't exist. Creating..."
+        aws cloudformation deploy --template-file step-function-template.yaml --stack-name StepFunctionStack --parameter-overrides Parameter1=Value1 Parameter2=Value2
+      else
+        echo "Step Function already exists, skipping creation."
+      fi
+
+create_glue_database:
+  stage: create_glue_database
+  script:
+    - echo "Checking if Glue Database already exists..."
+    - glue_db_exists=$(aws glue get-database --name YourDatabaseName --output json | jq -r '.Database.Name')
+    - if [ -z "$glue_db_exists" ]; then
+        echo "Glue Database doesn't exist. Creating..."
+        aws cloudformation deploy --template-file glue-database-template.yaml --stack-name GlueDatabaseStack --parameter-overrides Parameter1=Value1 Parameter2=Value2
+      else
+        echo "Glue Database already exists, skipping creation."
+      fi
+
+create_glue_table:
+  stage: create_glue_table
+  script:
+    - echo "Checking if Glue Table already exists..."
+    - glue_table_exists=$(aws glue get-table --database-name YourDatabaseName --name YourTableName --output json | jq -r '.Table.Name')
+    - if [ -z "$glue_table_exists" ]; then
+        echo "Glue Table doesn't exist. Creating..."
+        aws cloudformation deploy --template-file glue-table-template.yaml --stack-name GlueTableStack --parameter-overrides Parameter1=Value1 Parameter2=Value2
+      else
+        echo "Glue Table already exists, skipping creation."
+      fi
+
+create_glue_job:
+  stage: create_glue_job
+  script:
+    - echo "Checking if Glue Job already exists..."
+    - glue_job_exists=$(aws glue get-job --name YourGlueJobName --output json | jq -r '.Job.Name')
+    - if [ -z "$glue_job_exists" ]; then
+        echo "Glue Job doesn't exist. Creating..."
+        aws cloudformation deploy --template-file glue-job-template.yaml --stack-name GlueJobStack --parameter-overrides Parameter1=Value1 Parameter2=Value2
+      else
+        echo "Glue Job already exists, skipping creation."
+      fi
+
+create_batch_resources:
+  stage: create_batch_resources
+  script:
+    - echo "Checking if Batch Job Queue already exists..."
+    - job_queue_exists=$(aws batch describe-job-queues --job-queues YourJobQueue --output json | jq -r '.jobQueues | length')
+    - if [ "$job_queue_exists" -eq 0 ]; then
+        echo "Batch Job Queue doesn't exist. Creating..."
+        aws cloudformation deploy --template-file batch-resources-template.yaml --stack-name BatchResourcesStack --parameter-overrides Parameter1=Value1 Parameter2=Value2
+      else
+        echo "Batch Job Queue already exists, skipping creation."
+      fi
+
+create_resources:
+  stage: create_resources
+  script:
+    - echo "Checking and creating resources..."
+    - echo "Parameter 1: $PARAMETER1"
+    - echo "Parameter 2: $PARAMETER2"
+    # Add your resource creation steps using the entered parameters
