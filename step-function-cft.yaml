@@ -1,5 +1,21 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
+Parameters:
+  StateMachineName:
+    Type: String
+    Default: MyStateMachineName
+    Description: The name of the Step Functions state machine
+
+  RoleArn:
+    Type: String
+    Default: arn:aws:iam::123456789012:role/YourStepFunctionsRole
+    Description: The ARN of the IAM role for the Step Functions state machine
+
+  DefinitionFileLocation:
+    Type: String
+    Default: path/to/your/state-machine-definition.json
+    Description: The S3 path to the external state machine definition file
+
 Transform: AWS::Include
 Description: Include external Step Functions definition file
 
@@ -11,6 +27,7 @@ Resources:
         Fn::Transform:
           Name: AWS::Include
           Parameters:
-            Location: path/to/your/state-machine-definition.json
-      Name: MyStateMachineName
-      RoleArn: arn:aws:iam::123456789012:role/YourStepFunctionsRole
+            Location: !Ref DefinitionFileLocation
+      Name: !Ref StateMachineName
+      RoleArn: !Ref RoleArn
+      
