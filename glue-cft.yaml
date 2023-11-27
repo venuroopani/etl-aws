@@ -1,42 +1,18 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
 Resources:
-  # IAM Role for Glue Job
-  GlueJobRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: glue.amazonaws.com
-            Action: 'sts:AssumeRole'
-      Path: /
-      Policies:
-        - PolicyName: glue-policy  
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 's3:GetBucketLocation'
-                  - 's3:ListAllMyBuckets'
-                Resource: '*' 
-              - 
-                Effect: Allow
-                Action: 
-                  - 's3:GetObject'
-                  - 's3:PutObject' 
-                Resource: 
-                  - arn:aws:s3:::yourbucket
-                  - arn:aws:s3:::yourbucket/*     
-                 
-  # Glue Job      
-  GlueJob:
+  MyGlueJob:
     Type: 'AWS::Glue::Job'
     Properties:
-      Command: 
+      Name: MyGlueJob
+      Role: arn:aws:iam::123456789012:role/YourGlueServiceRole
+      Command:
         Name: glueetl
-        ScriptLocation: s3://yourbucket/glue-scripts/job.py
-      DefaultArguments:  
-        '--some_parameter': "some_value"
-      Role: !GetAtt GlueJobRole.Arn        
-      ExecutionProperty:
-        MaxConcurrentRuns: 2
+        ScriptLocation: s3://your-s3-bucket/your-glue-script.py
+      DefaultArguments:
+        "--job-language": python
+        "--extra-py-files": s3://your-s3-bucket/your-python-dependency.zip
+      GlueVersion: "4.0"
+      WorkerType: G.2X
+      NumberOfWorkers: 2
+      MaxCapacity: 2.0
