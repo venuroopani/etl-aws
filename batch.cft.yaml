@@ -1,29 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 'AWS Batch via Fargate'
 Resources:
-
-  BatchServiceRole:
+  ComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      Type: MANAGED
+      State: ENABLED
+      ServiceRole: !Ref ServiceRole
+      ComputeResources:
+        Type: FARGATE
+        MaxvCpus: 1
+        Subnets:
+        - subnet-06e12ab39d5bca992
+        - subnet-07cd487546890979f
+        - subnet-06908f833a2ea8658
+        - subnet-04af6811447d2cf77
+        - subnet-0ee30832d2a0415c3
+        - subnet-0daea6ccfae41f95a
+        SecurityGroupIds:
+        - sg-0f020f0fbf5199fd2
+  ServiceRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
+        Version: 2012-10-17
         Statement:
-          - Effect: Allow
+          - Effect: 'Allow'
             Principal:
-              Service: batch.amazonaws.com
-            Action: sts:AssumeRole
+              Service:
+                - 'batch.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
-
-  BatchJobQueue:
+        - 'arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole'
+  JobQueue:
     Type: AWS::Batch::JobQueue
     Properties:
-      Priority: 1
       ComputeEnvironmentOrder:
-        - ComputeEnvironment
+        - ComputeEnvironment: !Ref ComputeEnvironment
+          Order: 1
+      Priority: 1
+      State: ENABLED
 
-  BatchJobDefinition:
+  JobDefinition:
     Type: AWS::Batch::JobDefinition
-    Properties: 
+    Properties:
       Type: container
+      JobDefinitionName: { Ref: "AWS::StackName" }
+      PlatformCapabilities:
+      - FARGATE
+      Timeout:
+        AttemptDurationSeconds: 60
+      RetryStrategy:
+        Attempts: 1
       ContainerProperties:
-        Image: busybox
-        Vcpus: 2
-        Memory: 512      
+        Command:
+        - echo
+        - hello
+        - world
+        Image: 'debian:latest'
+        NetworkConfiguration:
+          AssignPublicIp: ENABLED
+        ResourceRequirements:
+        - Type: VCPU
+          Value: 0.5
+        - Type: MEMORY
+          Value: 1024
+        JobRoleArn: arn:aws:iam::583896736300:role/ecsTaskExecutionRole
+        ExecutionRoleArn: arn:aws:iam::583896736300:role/ecsTaskExecutionRole
