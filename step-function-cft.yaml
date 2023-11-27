@@ -1,33 +1,40 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
+Description: An example template for a Step Functions state machine.
 
 Parameters:
   StateMachineName:
     Type: String
-    Default: MyStateMachineName
-    Description: The name of the Step Functions state machine
+    Default: HelloWorld-StateMachine
+    Description: Name of the Step Functions state machine
 
   RoleArn:
     Type: String
-    Default: arn:aws:iam::123456789012:role/YourStepFunctionsRole
-    Description: The ARN of the IAM role for the Step Functions state machine
+    Description: ARN of the IAM role for the Step Functions state machine
 
-  DefinitionFileLocation:
+  BucketName:
     Type: String
-    Default: path/to/your/state-machine-definition.json
-    Description: The S3 path to the external state machine definition file
+    Description: Name of the S3 bucket containing the state machine definition
 
-Transform: AWS::Include
-Description: Include external Step Functions definition file
+  S3Key:
+    Type: String
+    Description: Key (path) to the state machine definition file in the S3 bucket
 
 Resources:
   MyStateMachine:
-    Type: 'AWS::StepFunctions::StateMachine'
+    Type: AWS::StepFunctions::StateMachine
     Properties:
-      DefinitionString:
-        Fn::Transform:
-          Name: AWS::Include
-          Parameters:
-            Location: !Ref DefinitionFileLocation
-      Name: !Ref StateMachineName
+      StateMachineName: !Ref StateMachineName
+      DefinitionS3Location:
+        Bucket: !Ref BucketName
+        Key: !Ref S3Key
       RoleArn: !Ref RoleArn
-      
+
+
+aws cloudformation create-stack \
+  --stack-name YourStateMachineStack \
+  --template-body file://path/to/your/template.yaml \
+  --parameters \
+    ParameterKey=StateMachineName,ParameterValue=YourStateMachineName \
+    ParameterKey=RoleArn,ParameterValue=arn:aws:iam::111122223333:role/service-role/YourExecutionRole \
+    ParameterKey=BucketName,ParameterValue=your-s3-bucket \
+    ParameterKey=S3Key,ParameterValue=path/to/your/hello_world.json
