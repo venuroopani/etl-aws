@@ -16,6 +16,26 @@ Resources:
 
 aws cloudformation create-stack   --stack-name YourGlueDatabaseStack   --template-body file://glue-databse-cft.yaml   --parameters ParameterKey=DatabaseName,ParameterValue=test-db
 
+stages:
+  - deploy
+
+variables:
+  STACK_NAME: "YourGlueDatabaseStack"
+  TEMPLATE_FILE: "glue-databse-cft.yaml"
+  DATABASE_NAME: "test-db"
+
+deploy_stack:
+  stage: deploy
+  script:
+    - |
+      if aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null; then
+        echo "Stack already exists. Skipping stack creation."
+      else
+        aws cloudformation create-stack \
+          --stack-name $STACK_NAME \
+          --template-body file://$TEMPLATE_FILE \
+          --parameters ParameterKey=DatabaseName,ParameterValue=$DATABASE_NAME
+      fi
 
 =======================================
 
@@ -58,3 +78,29 @@ Resources:
 
 
 aws cloudformation create-stack   --stack-name GlueTableStack   --template-body file://aws-glue-table-cft.yaml   --parameters ParameterKey=DatabaseName,ParameterValue=test-db ParameterKey=TableName,ParameterValue=table-name ParameterKey=S3Location,ParameterValue=s3://your-s3-bucket/path/to/data
+
+stages:
+  - deploy
+
+variables:
+  STACK_NAME: "GlueTableStack"
+  TEMPLATE_FILE: "aws-glue-table-cft.yaml"
+  DATABASE_NAME: "test-db"
+  TABLE_NAME: "table-name"
+  S3_LOCATION: "s3://your-s3-bucket/path/to/data"
+
+deploy_stack:
+  stage: deploy
+  script:
+    - |
+      if aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null; then
+        echo "Stack already exists. Skipping stack creation."
+      else
+        aws cloudformation create-stack \
+          --stack-name $STACK_NAME \
+          --template-body file://$TEMPLATE_FILE \
+          --parameters \
+            ParameterKey=DatabaseName,ParameterValue=$DATABASE_NAME \
+            ParameterKey=TableName,ParameterValue=$TABLE_NAME \
+            ParameterKey=S3Location,ParameterValue=$S3_LOCATION
+      fi
