@@ -38,3 +38,37 @@ aws cloudformation create-stack \
     ParameterKey=RoleArn,ParameterValue=arn:aws:iam::111122223333:role/service-role/YourExecutionRole \
     ParameterKey=BucketName,ParameterValue=your-s3-bucket \
     ParameterKey=S3Key,ParameterValue=path/to/your/hello_world.json
+
+
+
+stages:
+  - deploy
+
+variables:
+  STACK_NAME: YourStateMachineStack
+  TEMPLATE_FILE: path/to/your/template.yaml
+  AWS_DEFAULT_REGION: your-region
+  AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID  # Set your AWS credentials in GitLab CI/CD environment variables
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+  STATE_MACHINE_NAME: YourStateMachineName
+  EXECUTION_ROLE_ARN: arn:aws:iam::111122223333:role/service-role/YourExecutionRole
+  S3_BUCKET: your-s3-bucket
+  S3_KEY: path/to/your/hello_world.json
+
+deploy_stack:
+  stage: deploy
+  script:
+    - |
+      if aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null; then
+        echo "Stack already exists. Skipping stack creation."
+      else
+        aws cloudformation create-stack \
+          --stack-name $STACK_NAME \
+          --template-body file://$TEMPLATE_FILE \
+          --parameters \
+            ParameterKey=StateMachineName,ParameterValue=$STATE_MACHINE_NAME \
+            ParameterKey=RoleArn,ParameterValue=$EXECUTION_ROLE_ARN \
+            ParameterKey=BucketName,ParameterValue=$S3_BUCKET \
+            ParameterKey=S3Key,ParameterValue=$S3_KEY
+      fi
+
