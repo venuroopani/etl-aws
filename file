@@ -17,3 +17,16 @@ aws cloudformation create-stack \
                ParameterKey=RoleArn,ParameterValue=arn:aws:iam::123456789012:role/CustomRole \
                ParameterKey=DefinitionFileLocation,ParameterValue=s3://your-bucket/your-custom-state-machine-definition.json
 
+
+# Run the aws configure command to set up your AWS credentials and default region
+aws configure
+
+# Extract AWS account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+
+# Extract default region
+AWS_REGION=$(aws configure get region)
+
+# Print the values
+echo "AWS Account ID: $AWS_ACCOUNT_ID"
+echo "AWS Region: $AWS_REGION"
