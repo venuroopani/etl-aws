@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+# ecr repo creation parameters
+Parameters:
+  EcrRepositoryName:
+    Type: String
+    Description: Name of the ECR repository
+# glue job parameters
+  GlueConnectionName:
+    Type: String
+    Description: Name of the Glue Connection
+
+  GlueRoleArn:
+    Type: String
+    Description: ARN of the IAM role for the Glue job
+
+  GlueScriptLocation:
+    Type: String
+    Description: S3 path to the Glue ETL script
+
+  ExtraPyFiles:
+    Type: String
+    Description: S3 path to the Glue ETL script
+# batch job parameters
+  ComputeEnvironment:
+    Type: String
+    Description: ARN of the AWS Batch Compute Environment
+
+  ImageName:
+    Type: String
+    Description: Name of the Docker image
+
+  JobRoleArn:
+    Type: String
+    Description: ARN of the IAM role for the job
+
+  ExecutionRoleArn:
+    Type: String
+    Description: ARN of the IAM role for execution	
+# glue database creation	
+  DatabaseName:
+    Type: String
+    Description: Name of the Glue Database
+
+# glue database table parameters
+  DatabaseName:
+    Type: String
+    Description: Name of the Glue Database
+  TableName:
+    Type: String
+    Description: Name of the Glue Table
+  S3Location:
+    Type: String
+    Description: S3 location of the data
+# step function parameters
+
+  StateMachineName:
+    Type: String
+    Default: bkfs-StateMachine
+    Description: Name of the Step Functions state machine
+
+  StepFunctionRoleArn:
+    Type: String
+    Description: ARN of the IAM role for the Step Functions state machine
+
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket containing the state machine definition
+
+  S3Key:
+    Type: String
+    Description: Key (path) to the state machine definition file in the S3 bucket
+
+Resources:
+# repo creation
+  MyRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref EcrRepositoryName
+# glue database creation
+  MyGlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Ref DatabaseName
+# glue job creation
+  MyGlueJob:
+    Type: 'AWS::Glue::Job'
+    Properties:
+      Name: MyGlueJob
+      Role: !Ref GlueRoleArn
+      Command:
+        Name: glueetl
+        ScriptLocation: !Ref GlueScriptLocation
+      DefaultArguments:
+        '--job-bookmark-option': 'job-bookmark-disable'
+        '--key1': 'value1'
+        '--key2': 'value2'
+        '--TempDir': 's3://your-s3-bucket/temp-path/'
+        '--job-language': 'python'
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--enable-spark-ui': 'true'
+        '--spark-event-logs-path': 's3://your-s3-bucket/spark-logs/'
+        '--extra-py-files': !Ref ExtraPyFiles
+        '--connection-name': !Ref GlueConnectionName
+
+      GlueVersion: "4.0"
+      WorkerType: G.2X
+      NumberOfWorkers: 10
+
+# batch job resoures
+  JobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      ComputeEnvironmentOrder:
+        - ComputeEnvironment: !Ref ComputeEnvironment
+          Order: 1
+      Priority: 1
+      State: ENABLED
+
+  JobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      Type: container
+      JobDefinitionName: !Ref AWS::StackName
+      PlatformCapabilities:
+        - FARGATE
+      Timeout:
+        AttemptDurationSeconds: 60
+      RetryStrategy:
+        Attempts: 1
+      ContainerProperties:
+        Command:
+          - echo
+          - hello
+          - world
+        Image: !Ref ImageName
+        NetworkConfiguration:
+          AssignPublicIp: ENABLED
+        ResourceRequirements:
+          - Type: VCPU
+            Value: 0.5
+          - Type: MEMORY
+            Value: 1024
+        JobRoleArn: !Ref JobRoleArn
+        ExecutionRoleArn: !Ref ExecutionRoleArn
+
+# glue database table creation
+
+  MyGlueTable:
+    Type: AWS::Glue::Table
+    Properties:
+      DatabaseName: !Ref DatabaseName
+      CatalogId: !Ref AWS::AccountId
+      TableInput:
+        Name: !Ref TableName
+        StorageDescriptor:
+          Columns:
+            - Name: column1
+              Type: string
+            - Name: column2
+              Type: int
+          Location: !Ref S3Location
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+          Parameters:
+            classification: json
+            compressionType: none
+
+# step creation 
+
+  MyStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Ref StateMachineName
+      DefinitionS3Location:
+        Bucket: !Ref BucketName
+        Key: !Ref S3Key
+      RoleArn: !Ref StepFunctionRoleArn
