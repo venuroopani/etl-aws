@@ -65,3 +65,37 @@ aws cloudformation create-stack \
                ParameterKey=JobRoleArn,ParameterValue=arn:aws:iam::your-account-id:role/your-job-role \
                ParameterKey=ExecutionRoleArn,ParameterValue=arn:aws:iam::your-account-id:role/your-execution-role \
   --capabilities CAPABILITY_IAM
+
+
+stages:
+  - deploy
+
+variables:
+  STACK_NAME: YourBatchStack
+  TEMPLATE_FILE: path/to/your/template.yaml
+  AWS_DEFAULT_REGION: your-region
+  AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID  # Set your AWS credentials in GitLab CI/CD environment variables
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+  COMPUTE_ENVIRONMENT: arn:aws:batch:your-region:your-account-id:compute-environment/your-compute-env
+  DOCKER_IMAGE_NAME: your-docker-image-name
+  JOB_ROLE_ARN: arn:aws:iam::your-account-id:role/your-job-role
+  EXECUTION_ROLE_ARN: arn:aws:iam::your-account-id:role/your-execution-role
+
+deploy_stack:
+  stage: deploy
+  script:
+    - |
+      if aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null; then
+        echo "Stack already exists. Skipping stack creation."
+      else
+        aws cloudformation create-stack \
+          --stack-name $STACK_NAME \
+          --template-body file://$TEMPLATE_FILE \
+          --parameters \
+            ParameterKey=ComputeEnvironment,ParameterValue=$COMPUTE_ENVIRONMENT \
+            ParameterKey=ImageName,ParameterValue=$DOCKER_IMAGE_NAME \
+            ParameterKey=JobRoleArn,ParameterValue=$JOB_ROLE_ARN \
+            ParameterKey=ExecutionRoleArn,ParameterValue=$EXECUTION_ROLE_ARN \
+          --capabilities CAPABILITY_IAM
+      fi
+    
