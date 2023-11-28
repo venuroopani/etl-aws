@@ -51,3 +51,35 @@ aws cloudformation create-stack \
                ParameterKey=GlueRoleArn,ParameterValue=arn:aws:iam::your-account-id:role/YourGlueRole \
                ParameterKey=GlueScriptLocation,ParameterValue=s3://your-s3-bucket/your-glue-script.py \
                ParameterKey=ExtraPyFiles,ParameterValue=
+
+
+
+stages:
+  - deploy
+
+variables:
+  STACK_NAME: YourGlueJobStack
+  TEMPLATE_FILE: path/to/your/template.yaml
+  AWS_DEFAULT_REGION: your-region
+  AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID  # Set your AWS credentials in GitLab CI/CD environment variables
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+  GLUE_CONNECTION_NAME: YourConnectionName
+  GLUE_ROLE_ARN: arn:aws:iam::your-account-id:role/YourGlueRole
+  GLUE_SCRIPT_LOCATION: s3://your-s3-bucket/your-glue-script.py
+  EXTRA_PY_FILES: ''
+
+deploy_stack:
+  stage: deploy
+  script:
+    - |
+      if aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null; then
+        echo "Stack already exists. Skipping stack creation."
+      else
+        aws cloudformation create-stack \
+          --stack-name $STACK_NAME \
+          --template-body file://$TEMPLATE_FILE \
+          --parameters ParameterKey=GlueConnectionName,ParameterValue=$GLUE_CONNECTION_NAME \
+                       ParameterKey=GlueRoleArn,ParameterValue=$GLUE_ROLE_ARN \
+                       ParameterKey=GlueScriptLocation,ParameterValue=$GLUE_SCRIPT_LOCATION \
+                       ParameterKey=ExtraPyFiles,ParameterValue=$EXTRA_PY_FILES
+      fi
