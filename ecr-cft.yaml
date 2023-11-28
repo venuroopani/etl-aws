@@ -9,3 +9,28 @@ Resources:
     Properties:
       RepositoryName: !Ref RepositoryName
 aws cloudformation create-stack   --stack-name YourECRStack   --template-body file://ecr-cft.yaml   --parameters ParameterKey=RepositoryName,ParameterValue=test-repo-2
+
+
+stages:
+  - deploy
+
+variables:
+  STACK_NAME: YourECRStack
+  TEMPLATE_FILE: ecr-cft.yaml
+  AWS_DEFAULT_REGION: your-region
+  AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID  # Set your AWS credentials in GitLab CI/CD environment variables
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+  REPO_NAME: test-repo-2
+
+deploy_stack:
+  stage: deploy
+  script:
+    - |
+      if aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null; then
+        echo "Stack already exists. Skipping stack creation."
+      else
+        aws cloudformation create-stack \
+          --stack-name $STACK_NAME \
+          --template-body file://$TEMPLATE_FILE \
+          --parameters ParameterKey=RepositoryName,ParameterValue=$REPO_NAME
+      fi
