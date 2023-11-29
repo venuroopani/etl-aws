@@ -104,3 +104,53 @@ deploy_stack:
             ParameterKey=TableName,ParameterValue=$TABLE_NAME \
             ParameterKey=S3Location,ParameterValue=$S3_LOCATION
       fi
+
+
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Create On-Demand Glue Crawler for Schema Inference'
+
+Parameters:
+  DatabaseName:
+    Type: String
+    Description: Name of the Glue Database
+  TableName:
+    Type: String
+    Description: Name of the Glue Table
+  S3Location:
+    Type: String
+    Description: S3 location to crawl for schema inference
+
+Resources:
+  GlueCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: GlueCrawlerForSchemaInference
+      Schedule: ''
+      DatabaseName: !Ref DatabaseName
+      Targets:
+        S3Targets:
+          - Path: !Ref S3Location
+      Role: !GetAtt GlueCrawlerRole.Arn
+      TableStyle: 'EXTERNAL_TABLE'
+
+  GlueCrawlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'glue.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'GlueCrawlerPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:ListBucket'
+                  - 's3:GetObject'
+                Resource: !Sub 'arn:aws:s3:::${S3Location}*'
