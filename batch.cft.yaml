@@ -98,4 +98,41 @@ deploy_stack:
             ParameterKey=ExecutionRoleArn,ParameterValue=$EXECUTION_ROLE_ARN \
           --capabilities CAPABILITY_IAM
       fi
-    
+
+
+# AWS Batch stack (MyBatchStack)
+Resources:
+  MyJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      ...
+  MyJobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      ...
+Outputs:
+  JobQueueArn:
+    Value: !GetAtt MyJobQueue.Arn
+    Export:
+      Name: MyJobQueueArnExport
+  JobDefinitionArn:
+    Value: !GetAtt MyJobDefinition.Arn
+    Export:
+      Name: MyJobDefinitionArnExport
+
+
+
+
+# AWS Step Functions stack (MyStepFunctionsStack)
+Resources:
+  MyStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      DefinitionString:
+        ...
+        - ...
+        - Type: Task
+          Resource: arn:aws:states:your-region:your-account-id:task:MyTask
+          Parameters:
+            JobQueueArn.$: !ImportValue MyBatchStack-MyJobQueueArnExport
+            JobDefinitionArn.$: !ImportValue MyBatchStack-MyJobDefinitionArnExport
